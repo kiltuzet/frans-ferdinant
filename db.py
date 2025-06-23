@@ -39,20 +39,18 @@ class Database:
             print(f"Error executing query: {e}")
             return None
     def fetch_all(self, query, params=None):
-        cursor = self.execute_query(query, params)
-        if cursor:
-            try:
-                result = cursor.fetchall()
-                return result
-            finally:
+        cursor = None
+        try:
+            cursor = self.connection.cursor(dictionary=True)
+            cursor.execute(query, params or ())
+            return cursor.fetchall()  # Явно получаем все результаты
+        except Error as e:
+            print(f"Error fetching data: {e}")
+            return []
+        finally:
+            if cursor:
                 cursor.close()  # Всегда закрываем курсор
-        return []
-    """def fetch_all(self, query, params=None):
-        cursor = self.execute_query(query, params)
-        if cursor:
-            return cursor.fetchall()
-        return []
-    """
+
     def fetch_one(self, query, params=None):
         cursor = self.execute_query(query, params)
         if cursor:

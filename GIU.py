@@ -1,12 +1,12 @@
-﻿#da
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
-    QComboBox, QMessageBox, QTabWidget, QDateTimeEdit
+    QComboBox, QMessageBox, QTabWidget, QDateTimeEdit,QShortcut,QDialog
 )
 from PyQt5.QtCore import Qt, QDateTime
+from PyQt5.QtGui import QKeySequence
 from db import Database
-
+from admin import AdminLoginDialog,AdminPanel
 class BusDepotApp(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -14,6 +14,9 @@ class BusDepotApp(QMainWindow):
         self.setWindowTitle("Автобусный парк")
         self.setGeometry(100, 100, 900, 600)
         
+        self.admin_shortcut = QShortcut(QKeySequence("Ctrl+Shift+A"), self)
+        self.admin_shortcut.activated.connect(self.show_admin_login)
+
         self.init_ui()
         self.load_data()
     
@@ -39,6 +42,13 @@ class BusDepotApp(QMainWindow):
         # Вкладка поиска
         self.create_search_tab()
     
+     
+    def show_admin_login(self):
+        login_dialog = AdminLoginDialog(self)
+        if login_dialog.exec_() == QDialog.Accepted:
+            admin_panel = AdminPanel(self.db, self)
+            admin_panel.exec_()
+
     def create_buses_tab(self):
         tab = QWidget()
         layout = QVBoxLayout(tab)
@@ -147,7 +157,7 @@ class BusDepotApp(QMainWindow):
     def load_data(self):
         self.load_buses()
         self.load_routes()
-        #self.load_booking_routes()
+        self.load_booking_routes()
     
     def load_buses(self):
         buses = self.db.fetch_all("""
