@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (
     QComboBox, QMessageBox, QTabWidget, QDateTimeEdit,QShortcut,QDialog
 )
 from PyQt5.QtCore import Qt, QDateTime
-from PyQt5.QtGui import QKeySequence
+from PyQt5.QtGui import QKeySequence, QIcon
 from db import Database
 from admin import AdminLoginDialog,AdminPanel
 from WelcomeDialog import WelcomeDialog
@@ -65,11 +65,15 @@ class BusDepotApp(QMainWindow):
         self.buses_table.setHorizontalHeaderLabels([
             "ID", "Марка", "Модель", "Год", "Вместимость", "Статус"
         ])
-        self.buses_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.buses_table.setAlternatingRowColors(True)
+        self.buses_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.buses_table.setToolTip("Список автобусов")
         layout.addWidget(self.buses_table)
         
         # Кнопка обновления
         btn_refresh = QPushButton("Обновить данные")
+        btn_refresh.setToolTip("Обновить данные автобусов")
+        btn_refresh.setIcon(QIcon("icons/refresh.png"))  # если есть иконка
         btn_refresh.clicked.connect(self.load_buses)
         layout.addWidget(btn_refresh)
         
@@ -125,6 +129,7 @@ class BusDepotApp(QMainWindow):
         
         # Количество билетов
         self.tickets_count = QLineEdit("1")
+        self.tickets_count.setPlaceholderText("Введите количество билетов")
         form_layout.addWidget(QLabel("Количество билетов:"))
         form_layout.addWidget(self.tickets_count)
         
