@@ -10,6 +10,7 @@ from PyQt5.QtGui import QKeySequence
 from db import Database
 from ManagePermissionsDialog import ManagePermissionsDialog
 from CreateTableDialog import CreateTableDialog
+from EditTableDialog import EditTableDialog
 
 
 class AdminLoginDialog(QDialog):
@@ -195,14 +196,24 @@ class AdminPanel(QDialog):
             table_name = item.data(0, Qt.UserRole)
             
             manage_permissions_action = QAction("Управление правами", self)
-            
             manage_permissions_action.triggered.connect(
                 lambda: self.manage_permissions(table_name)
-             )
+            )
             context_menu.addAction(manage_permissions_action)
+
+            edit_table_action = QAction("Редактировать таблицу", self)
+            edit_table_action.triggered.connect(
+                lambda: self.edit_table(table_name)
+            )
+            context_menu.addAction(edit_table_action)
             
         if context_menu.actions():
             context_menu.exec_(self.db_tree.viewport().mapToGlobal(position))
+
+    def edit_table(self, table_name):
+        dialog = EditTableDialog(self.db, table_name, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self.load_database_structure()
     
     def create_new_table(self):
         dialog = CreateTableDialog(self.db, self)
@@ -300,5 +311,3 @@ class BusDepotApp(QMainWindow):
         self.init_ui()
         self.load_data()
    
-    
-    # ... (остальной код класса BusDepotApp остается без изменений)
