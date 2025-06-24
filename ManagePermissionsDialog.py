@@ -123,10 +123,11 @@ class ManagePermissionsDialog(QDialog):
         try:
             # Проверяем существующие права
             existing = self.db.fetch_one(
-                "SELECT 1 FROM user_permissions WHERE user_id = %s AND table_name = %s",
+                "SELECT 1 FROM user_permissions WHERE user_id = %s AND table_name = \'%s\' ",
                 (user_id, self.table_name)
             )
-            
+            print("existing")
+            print(existing)
             if existing:
                 # Обновляем существующие права
                 self.db.execute_query("""
