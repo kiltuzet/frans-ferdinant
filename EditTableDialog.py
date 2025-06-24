@@ -3,6 +3,7 @@ from PyQt5.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox, QDialogButtonBox, QComboBox,
     QWidget,QInputDialog
 )
+from PyQt5.QtCore import Qt
 
 class EditTableDialog(QDialog):
     def __init__(self, db, table_name, parent=None):
@@ -13,6 +14,8 @@ class EditTableDialog(QDialog):
         self.setMinimumSize(700, 500)
         self.init_ui()
         self.load_columns()
+        # Устанавливаем фильтр событий
+        self.columns_table.installEventFilter(self)
 
     def init_ui(self):
         layout = QVBoxLayout(self)
@@ -84,6 +87,7 @@ class EditTableDialog(QDialog):
             QMessageBox.information(self, "Успех", "Таблица переименована")
             self.table_name = new_name
             self.setWindowTitle(f"Редактировать таблицу: {new_name}")
+            self.accept()  # <-- Add this line
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", str(e))
 
@@ -131,3 +135,22 @@ class EditTableDialog(QDialog):
                 self.accept()
             except Exception as e:
                 QMessageBox.critical(self, "Ошибка", str(e))
+
+    def eventFilter(self, obj, event):
+        #нужно расставить логи
+        print("Event Filter Triggered")
+        # Проверяем, что событие произошло на таблице столбцов
+        if obj == self.columns_table and event.type() == event.KeyPress:
+            print("Key Pressed in Columns Table")
+            # Проверяем, что нажата клавиша Delete
+            if event.key() == Qt.Key_Delete:
+                print("Delete Key Pressed")
+                # Удаляем текущую строку
+                row = self.columns_table.currentRow()
+                print(f"Current Row: {row}")
+                if row >= 0:
+                    print(f"Removing Column at Row: {row}")
+                    #self.columns_table.removeRow(row)
+                    self.remove_column(row)
+                return True  # событие обработано
+        return super().eventFilter(obj, event)

@@ -7,6 +7,8 @@ from PyQt5.QtCore import Qt, QDateTime
 from PyQt5.QtGui import QKeySequence
 from db import Database
 from admin import AdminLoginDialog,AdminPanel
+from WelcomeDialog import WelcomeDialog
+
 class BusDepotApp(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -18,6 +20,10 @@ class BusDepotApp(QMainWindow):
         self.admin_shortcut.activated.connect(self.show_admin_login)
 
         self.init_ui()
+        
+        welcome = WelcomeDialog(self)
+        welcome.exec_()
+        
         self.load_data()
     
     def init_ui(self):

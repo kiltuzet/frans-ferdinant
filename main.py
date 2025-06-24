@@ -1,6 +1,7 @@
 import sys
 from PyQt5.QtWidgets import QApplication
 from GIU import BusDepotApp
+from WelcomeDialog import WelcomeDialog
 
 def main():
     app = QApplication(sys.argv)
@@ -15,3 +16,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

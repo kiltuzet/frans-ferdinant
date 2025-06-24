@@ -55,6 +55,8 @@ class AdminPanel(QDialog):
         self.init_ui()
         self.load_users()
         self.load_database_structure()
+        # Устанавливаем фильтр событий на дерево БД
+        self.db_tree.installEventFilter(self)
     
     def init_ui(self):
         self.tabs = QTabWidget()
@@ -212,8 +214,8 @@ class AdminPanel(QDialog):
 
     def edit_table(self, table_name):
         dialog = EditTableDialog(self.db, table_name, self)
-        if dialog.exec_() == QDialog.Accepted:
-            self.load_database_structure()
+        dialog.exec_()
+        self.load_database_structure()  # Always reload after dialog closes
     
     def create_new_table(self):
         dialog = CreateTableDialog(self.db, self)
@@ -298,6 +300,41 @@ class AdminPanel(QDialog):
             except Exception as e:
                 QMessageBox.critical(self, "Ошибка", f"Не удалось удалить пользователя: {str(e)}")
 
+    def eventFilter(self, obj, event):
+        if obj == self.db_tree and event.type() == event.KeyPress:
+            if event.key() == Qt.Key_Delete:
+                item = self.db_tree.currentItem()
+                if not item:
+                    return True
+                parent = item.parent()
+                # Если выбран столбец (есть родитель и родитель — таблица)
+                if parent and parent.parent() and parent.parent().text(0).startswith("База данных"):
+                    table_name = parent.data(0, Qt.UserRole)
+                    col_info = item.text(0)
+                    col_name = col_info.split(" ")[0]
+                    reply = QMessageBox.question(self, "Удалить столбец", f"Удалить столбец '{col_name}' из таблицы '{table_name}'?", QMessageBox.Yes | QMessageBox.No)
+                    if reply == QMessageBox.Yes:
+                        try:
+                            self.db.execute_query(f"ALTER TABLE {table_name} DROP COLUMN {col_name}")
+                            QMessageBox.information(self, "Успех", "Столбец удалён")
+                            self.load_database_structure()
+                        except Exception as e:
+                            QMessageBox.critical(self, "Ошибка", str(e))
+                    return True
+                # Если выбран элемент таблицы (есть родитель и он — корень)
+                elif parent and parent.text(0).startswith("База данных"):
+                    table_name = item.data(0, Qt.UserRole)
+                    reply = QMessageBox.question(self, "Удалить таблицу", f"Удалить таблицу '{table_name}'?", QMessageBox.Yes | QMessageBox.No)
+                    if reply == QMessageBox.Yes:
+                        try:
+                            self.db.execute_query(f"DROP TABLE {table_name}")
+                            QMessageBox.information(self, "Успех", "Таблица удалена")
+                            self.load_database_structure()
+                        except Exception as e:
+                            QMessageBox.critical(self, "Ошибка", str(e))
+                    return True
+        return super().eventFilter(obj, event)
+
 class BusDepotApp(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -310,4 +347,3 @@ class BusDepotApp(QMainWindow):
         
         self.init_ui()
         self.load_data()
-   
