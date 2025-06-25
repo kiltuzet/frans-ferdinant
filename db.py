@@ -38,6 +38,7 @@ class Database:
         except Error as e:
             print(f"Error executing query: {e}")
             return None
+        
     def fetch_all(self, query, params=None):
         cursor = None
         try:
@@ -52,11 +53,20 @@ class Database:
                 cursor.close()  # Всегда закрываем курсор
 
     def fetch_one(self, query, params=None):
-        cursor = self.execute_query(query, params)
-        if cursor:
+        print("Fetching one record")
+        print(f"Query: {query}, Params: {params}")
+        cursor = None
+        try:
+            cursor = self.connection.cursor(dictionary=True)
+            cursor.execute(query, params or ())
             return cursor.fetchone()
-        return None
-    
+        except Error as e:
+            print(f"Error fetching one: {e}")
+            return None
+        finally:
+            if cursor:
+                cursor.close()
+
     def close(self):
         if self.connection and self.connection.is_connected():
             self.connection.close()

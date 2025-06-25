@@ -1,12 +1,11 @@
 from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
-    QComboBox, QMessageBox, QTabWidget, QDateTimeEdit, QDialog,
-    QDialogButtonBox, QFormLayout, QShortcut,QHeaderView,QCheckBox,QGroupBox,QTreeWidget,
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
+    QComboBox, QMessageBox, QTabWidget, QDialog,
+    QDialogButtonBox, QFormLayout,QTreeWidget,
     QTreeWidgetItem,QAction,QMenu
 )
-from PyQt5.QtCore import Qt, QDateTime
-from PyQt5.QtGui import QKeySequence
+from PyQt5.QtCore import Qt
 from db import Database
 from ManagePermissionsDialog import ManagePermissionsDialog
 from CreateTableDialog import CreateTableDialog
@@ -60,6 +59,7 @@ class AdminPanel(QDialog):
     
     def init_ui(self):
         self.tabs = QTabWidget()
+        self.tabs.tabBar().setExpanding(True)  # табы будут занимать всё доступное пространство
         
         # Вкладка управления пользователями
         users_tab = QWidget()
@@ -347,3 +347,29 @@ class BusDepotApp(QMainWindow):
         
         self.init_ui()
         self.load_data()
+
+        # Устанавливаем стиль для табов
+        self.set_tab_style()
+
+    def set_tab_style(self):
+        style = """
+        QTabBar::tab {
+            background: #e9ecef;
+            color: #333;
+            padding: 6px 12px;
+            border: 1px solid #57b7c1;
+            border-bottom: none;
+            border-radius: 6px 6px 0 0;
+            margin-right: 2px;
+            min-width: 180px;
+            max-width: 300px;
+            min-height: 28px;
+            font-size: 15px;
+            font-weight: 500;
+            z-index: 1;
+            text-align: center;
+            white-space: normal;
+            height: 40px;
+        }
+        """
+        self.tabs.setStyleSheet(style)

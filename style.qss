@@ -1,0 +1,113 @@
+QMainWindow, QDialog, QWidget {
+    background-color:rgb(252, 252, 252);
+    font-family: Segoe UI, Arial, sans-serif;
+    font-size: 13px;
+}
+QTabWidget::pane {
+    border: 1px solid #6ec6d4;
+    background: #e9ecef;
+}
+QTabBar::tab {
+    background: #e9ecef;
+    color: #333;
+    padding: 6px 12px;        /* уменьшите отступы */
+    border: 1px solid #57b7c1;
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    margin-right: 2px;
+    min-width: 180px;         /* увеличьте ширину */
+    max-width: 300px;         /* ограничьте максимальную ширину */
+    min-height: 28px;
+    height: 40px; /* увеличьте высоту для двух строк */
+    font-size: 15px;
+    font-weight: 500;
+    z-index: 1;
+    text-align: center;
+    white-space: normal;
+}
+QTabBar::tab:selected {
+    background:rgb(236, 244, 255);
+    color: #0078d7;
+    font-weight: bold;
+    z-index: 1;
+}
+
+QTabBar::tab:!selected {
+    margin-top: 2px;
+}
+QTabBar QToolButton {
+    background: transparent;
+}
+QTableWidget, QTreeWidget {
+    background: #ffffff;
+    alternate-background-color: #f0f4f8;
+    gridline-color: #d0d7de;
+    selection-background-color: #cce6ff;
+    selection-color: #222;
+}
+QHeaderView::section {
+    background: #e9ecef;
+    color: #333;
+    padding: 4px;
+    border: 1px solid #57cbc4;
+}
+QPushButton {
+    background-color: #0078d7;
+    color: #fff;
+    border-radius: 5px;
+    padding: 6px 16px;
+    font-weight: bold;
+}
+QPushButton:hover {
+    background-color: #005fa3;
+}
+QPushButton:pressed {
+    background-color: #003e6b;
+}
+QLineEdit, QComboBox, QDateTimeEdit {
+    background: #fff;
+    border: 1px solid #6ec6d4;
+    border-radius: 4px;
+    padding: 4px 8px;
+}
+QLabel {
+    color: #222;
+}
+QDialogButtonBox QPushButton {
+    min-width: 80px;
+}
+QGroupBox {
+    border: 1px solid #6ec6d4;
+    border-radius: 6px;
+    margin-top: 8px;
+}
+QGroupBox:title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 3px 0 3px;
+}
+QMessageBox {
+    background: #fff;
+}
+/* --- Исправление для контекстного меню --- */
+QMenu {
+    background-color: #fff;
+    color: #222;
+    border: 1px solid #6ec6d4;
+}
+QMenu::item {
+    background-color: transparent;
+    color: #222;
+    padding: 6px 24px 6px 24px;
+}
+QMenu::item:selected {
+    background-color: #cce6ff;
+    color: #0078d7;
+}
+/* --- Исправление для выпадающих списков --- */
+QComboBox QAbstractItemView {
+    background: #fff;
+    color: #222;
+    selection-background-color: #cce6ff;
+    selection-color: #0078d7;
+}

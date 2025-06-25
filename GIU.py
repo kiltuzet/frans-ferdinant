@@ -8,6 +8,10 @@ from PyQt5.QtGui import QKeySequence, QIcon
 from db import Database
 from admin import AdminLoginDialog,AdminPanel
 from WelcomeDialog import WelcomeDialog
+from PyQt5.QtWebEngineWidgets import QWebEngineView
+import folium
+import os
+from PyQt5.QtCore import QUrl
 
 class BusDepotApp(QMainWindow):
     def __init__(self):
@@ -96,6 +100,11 @@ class BusDepotApp(QMainWindow):
             "Порядок", "Название", "Адрес", "Время прибытия"
         ])
         layout.addWidget(self.stops_table)
+
+        # Виджет для карты
+        self.route_map_view = QWebEngineView()
+        self.route_map_view.setMinimumHeight(350)
+        layout.addWidget(self.route_map_view)
         
         self.tabs.addTab(tab, "Маршруты")
     
@@ -201,23 +210,28 @@ class BusDepotApp(QMainWindow):
         route_id = self.route_combo.currentData()
         if not route_id:
             return
-        
+
         stops = self.db.fetch_all("""
-            SELECT rs.stop_order, s.name, s.address, rs.arrival_time
+            SELECT rs.stop_order, s.name, s.address, rs.arrival_time, s.latitude, s.longitude
             FROM route_stops rs
             JOIN stops s ON rs.id_stop = s.id
             WHERE rs.id_route = %s
             ORDER BY rs.stop_order
         """, (route_id,))
-        
+
         self.stops_table.setRowCount(len(stops))
         for row_idx, stop in enumerate(stops):
             self.stops_table.setItem(row_idx, 0, QTableWidgetItem(str(stop['stop_order'])))
             self.stops_table.setItem(row_idx, 1, QTableWidgetItem(stop['name']))
             self.stops_table.setItem(row_idx, 2, QTableWidgetItem(stop['address']))
             self.stops_table.setItem(row_idx, 3, QTableWidgetItem(str(stop['arrival_time'])))
-        
         self.stops_table.resizeColumnsToContents()
+        points = [(stop['latitude'], stop['longitude']) for stop in stops if stop['latitude'] and stop['longitude']]
+        if points:
+            html = self.generate_yandex_map_html(points, '4d5eb61f-4a3e-4ddc-91e4-736be3b4fc63')
+            self.route_map_view.setHtml(html)
+        else:
+            self.route_map_view.setHtml("<h3>Нет координат для построения маршрута</h3>")
     
     def load_booking_routes(self):
         routes = self.db.fetch_all("SELECT id, route_number, route_name FROM routes ORDER BY route_number")
@@ -267,7 +281,14 @@ class BusDepotApp(QMainWindow):
             return
         
         # Получаем информацию о маршруте для расчета стоимости
+        route_id = self.booking_route_combo.currentData()
+        print("route_id:", route_id)
+        if not route_id:
+            QMessageBox.warning(self, "Ошибка", "Не выбран маршрут")
+            return
+
         route = self.db.fetch_one("SELECT distance_km FROM routes WHERE id = %s", (route_id,))
+        print("Route:", route)
         if not route:
             QMessageBox.warning(self, "Ошибка", "Маршрут не найден")
             return
@@ -353,3 +374,49 @@ class BusDepotApp(QMainWindow):
     def closeEvent(self, event):
         self.db.close()
         event.accept()
+
+    def generate_yandex_map_html(self, points, api_key):
+        # points: [(lat, lon), ...]
+        points_js = ','.join(f'[{lat},{lon}]' for lat, lon in points)
+        center = points[0] if points else [55.75, 37.61]  # Москва по умолчанию
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8" />
+            <title>Маршрут на Яндекс.Карте</title>
+            <script src="https://api-maps.yandex.ru/2.1/?apikey={api_key}&lang=ru_RU"></script>
+            <style>
+                html, body, #map {{
+                    width: 100%; height: 100%; margin: 0; padding: 0;
+                }}
+            </style>
+        </head>
+        <body>
+            <div id="map"></div>
+            <script>
+                ymaps.ready(function () {{
+                    var map = new ymaps.Map('map', {{
+                        center: [{center[0]}, {center[1]}],
+                        zoom: 12
+                    }});
+                    var points = [{points_js}];
+                    if (points.length > 1) {{
+                        var multiRoute = new ymaps.multiRouter.MultiRoute({{
+                            referencePoints: points,
+                            params: {{
+                                routingMode: 'auto'
+                            }}
+                        }}, {{
+                            boundsAutoApply: true
+                        }});
+                        map.geoObjects.add(multiRoute);
+                    }} else if (points.length === 1) {{
+                        map.geoObjects.add(new ymaps.Placemark(points[0]));
+                    }}
+                }});
+            </script>
+        </body>
+        </html>
+        """
+        return html
