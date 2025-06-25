@@ -199,11 +199,21 @@ class BusDepotApp(QMainWindow):
         self.buses_table.resizeColumnsToContents()
     
     def load_routes(self):
-        routes = self.db.fetch_all("SELECT id, route_number, route_name FROM routes ORDER BY route_number")
+        # Получаем все маршруты
+        routes = self.db.fetch_all(
+            "SELECT id, route_number, route_name, is_regular, base_fare FROM routes ORDER BY route_number"
+        )
 
         self.route_combo.clear()
         for route in routes:
-            self.route_combo.addItem(f"{route['route_number']} - {route['route_name']}", route['id'])
+            # Если маршрут регулярный, добавляем стоимость в название
+            if route.get('is_regular'):
+                fare_str = f" (Стоимость: {route.get('base_fare', '—')} руб.)"
+            else:
+                fare_str = ""
+            self.route_combo.addItem(
+                f"{route['route_number']} - {route['route_name']}{fare_str}", route['id']
+            )
 
 
     def load_route_details(self):
@@ -234,11 +244,14 @@ class BusDepotApp(QMainWindow):
             self.route_map_view.setHtml("<h3>Нет координат для построения маршрута</h3>")
     
     def load_booking_routes(self):
-        routes = self.db.fetch_all("SELECT id, route_number, route_name FROM routes ORDER BY route_number")
+        # Только нерегулярные рейсы (is_regular = false/0)
+        routes = self.db.fetch_all(
+            "SELECT id, route_number, route_name FROM routes WHERE is_regular = 0 ORDER BY route_number"
+        )
         self.booking_route_combo.clear()
         for route in routes:
             self.booking_route_combo.addItem(f"{route['route_number']} - {route['route_name']}", route['id'])
-        
+
         self.booking_route_combo.currentIndexChanged.connect(self.update_stop_combos)
     
     def update_stop_combos(self):
