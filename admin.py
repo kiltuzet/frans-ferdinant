@@ -17,32 +17,45 @@ class AdminLoginDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Авторизация администратора")
         self.setModal(True)
-        
+        self.db = Database()  # Добавьте это, если нет доступа к db из родителя
+
         layout = QVBoxLayout(self)
         form_layout = QFormLayout()
-        
+
         self.username_input = QLineEdit()
         self.password_input = QLineEdit()
         self.password_input.setEchoMode(QLineEdit.Password)
-        
+
         form_layout.addRow("Логин:", self.username_input)
         form_layout.addRow("Пароль:", self.password_input)
-        
+
         layout.addLayout(form_layout)
-        
+
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.verify_credentials)
         buttons.rejected.connect(self.reject)
-        
+
         layout.addWidget(buttons)
-    
+
     def verify_credentials(self):
-        # Здесь должна быть проверка логина и пароля
-        # В реальном приложении используйте хеширование и безопасное хранение паролей
-        if self.username_input.text() == "admin" and self.password_input.text() == "admin123":
+        login = self.username_input.text().strip()
+        password = self.password_input.text().strip()
+        if not login or not password:
+            QMessageBox.warning(self, "Ошибка", "Введите логин и пароль")
+            return
+
+        # Получаем пользователя с ролью "Администратор"
+        user = self.db.fetch_one("""
+            SELECT u.id, u.login, u.password, t.type_name
+            FROM users u
+            JOIN user_types t ON u.id_type_user = t.id
+            WHERE u.login = %s
+        """, (login,))
+
+        if user and user['password'] == password and user['type_name'].lower() == "администратор":
             self.accept()
         else:
-            QMessageBox.warning(self, "Ошибка", "Неверные учетные данные")
+            QMessageBox.warning(self, "Ошибка", "Неверные учетные данные или недостаточно прав")
 
 class AdminPanel(QDialog):
     def __init__(self, db, parent=None):
