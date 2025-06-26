@@ -93,11 +93,15 @@ CREATE TABLE IF NOT EXISTS inspections (
 CREATE TABLE IF NOT EXISTS passengers (
     id INT AUTO_INCREMENT PRIMARY KEY,
     id_route INT,
+    departure_stop_id INT,
+    arrival_stop_id INT,
     boarding_time DATETIME,
     disembarkation_time DATETIME,
     ticket_number VARCHAR(20),
     fare DECIMAL(6,2),
     FOREIGN KEY (id_route) REFERENCES routes(id) ON DELETE SET NULL
+    FOREIGN KEY (departure_stop_id  REFERENCES bus_depot(id) ON DELETE SET NULL
+    FOREIGN KEY (arrival_stop_id) REFERENCES bus_depot(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Создание таблицы назначений автобусов на маршруты

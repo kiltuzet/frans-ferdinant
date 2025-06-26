@@ -1,11 +1,17 @@
-﻿#da
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
-    QComboBox, QMessageBox, QTabWidget, QDateTimeEdit
+    QComboBox, QMessageBox, QTabWidget, QDateTimeEdit,QShortcut,QDialog
 )
 from PyQt5.QtCore import Qt, QDateTime
+from PyQt5.QtGui import QKeySequence, QIcon
 from db import Database
+from admin import AdminLoginDialog,AdminPanel
+from WelcomeDialog import WelcomeDialog
+from PyQt5.QtWebEngineWidgets import QWebEngineView
+import folium
+import os
+from PyQt5.QtCore import QUrl
 
 class BusDepotApp(QMainWindow):
     def __init__(self):
@@ -14,7 +20,14 @@ class BusDepotApp(QMainWindow):
         self.setWindowTitle("Автобусный парк")
         self.setGeometry(100, 100, 900, 600)
         
+        self.admin_shortcut = QShortcut(QKeySequence("Ctrl+Shift+A"), self)
+        self.admin_shortcut.activated.connect(self.show_admin_login)
+
         self.init_ui()
+        
+        welcome = WelcomeDialog(self)
+        welcome.exec_()
+        
         self.load_data()
     
     def init_ui(self):
@@ -39,6 +52,13 @@ class BusDepotApp(QMainWindow):
         # Вкладка поиска
         self.create_search_tab()
     
+     
+    def show_admin_login(self):
+        login_dialog = AdminLoginDialog(self)
+        if login_dialog.exec_() == QDialog.Accepted:
+            admin_panel = AdminPanel(self.db, self)
+            admin_panel.exec_()
+
     def create_buses_tab(self):
         tab = QWidget()
         layout = QVBoxLayout(tab)
@@ -49,11 +69,15 @@ class BusDepotApp(QMainWindow):
         self.buses_table.setHorizontalHeaderLabels([
             "ID", "Марка", "Модель", "Год", "Вместимость", "Статус"
         ])
-        self.buses_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.buses_table.setAlternatingRowColors(True)
+        self.buses_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.buses_table.setToolTip("Список автобусов")
         layout.addWidget(self.buses_table)
         
         # Кнопка обновления
         btn_refresh = QPushButton("Обновить данные")
+        btn_refresh.setToolTip("Обновить данные автобусов")
+        btn_refresh.setIcon(QIcon("icons/refresh.png"))  # если есть иконка
         btn_refresh.clicked.connect(self.load_buses)
         layout.addWidget(btn_refresh)
         
@@ -76,6 +100,11 @@ class BusDepotApp(QMainWindow):
             "Порядок", "Название", "Адрес", "Время прибытия"
         ])
         layout.addWidget(self.stops_table)
+
+        # Виджет для карты
+        self.route_map_view = QWebEngineView()
+        self.route_map_view.setMinimumHeight(350)
+        layout.addWidget(self.route_map_view)
         
         self.tabs.addTab(tab, "Маршруты")
     
@@ -109,6 +138,7 @@ class BusDepotApp(QMainWindow):
         
         # Количество билетов
         self.tickets_count = QLineEdit("1")
+        self.tickets_count.setPlaceholderText("Введите количество билетов")
         form_layout.addWidget(QLabel("Количество билетов:"))
         form_layout.addWidget(self.tickets_count)
         
@@ -147,7 +177,7 @@ class BusDepotApp(QMainWindow):
     def load_data(self):
         self.load_buses()
         self.load_routes()
-        #self.load_booking_routes()
+        self.load_booking_routes()
     
     def load_buses(self):
         buses = self.db.fetch_all("""
@@ -169,41 +199,59 @@ class BusDepotApp(QMainWindow):
         self.buses_table.resizeColumnsToContents()
     
     def load_routes(self):
-        routes = self.db.fetch_all("SELECT id, route_number, route_name FROM routes ORDER BY route_number")
+        # Получаем все маршруты
+        routes = self.db.fetch_all(
+            "SELECT id, route_number, route_name, is_regular, base_fare FROM routes ORDER BY route_number"
+        )
 
         self.route_combo.clear()
         for route in routes:
-            self.route_combo.addItem(f"{route['route_number']} - {route['route_name']}", route['id'])
+            # Если маршрут регулярный, добавляем стоимость в название
+            if route.get('is_regular'):
+                fare_str = f" (Стоимость: {route.get('base_fare', '—')} руб.)"
+            else:
+                fare_str = ""
+            self.route_combo.addItem(
+                f"{route['route_number']} - {route['route_name']}{fare_str}", route['id']
+            )
 
 
     def load_route_details(self):
         route_id = self.route_combo.currentData()
         if not route_id:
             return
-        
+
         stops = self.db.fetch_all("""
-            SELECT rs.stop_order, s.name, s.address, rs.arrival_time
+            SELECT rs.stop_order, s.name, s.address, rs.arrival_time, s.latitude, s.longitude
             FROM route_stops rs
             JOIN stops s ON rs.id_stop = s.id
             WHERE rs.id_route = %s
             ORDER BY rs.stop_order
         """, (route_id,))
-        
+
         self.stops_table.setRowCount(len(stops))
         for row_idx, stop in enumerate(stops):
             self.stops_table.setItem(row_idx, 0, QTableWidgetItem(str(stop['stop_order'])))
             self.stops_table.setItem(row_idx, 1, QTableWidgetItem(stop['name']))
             self.stops_table.setItem(row_idx, 2, QTableWidgetItem(stop['address']))
             self.stops_table.setItem(row_idx, 3, QTableWidgetItem(str(stop['arrival_time'])))
-        
         self.stops_table.resizeColumnsToContents()
+        points = [(stop['latitude'], stop['longitude']) for stop in stops if stop['latitude'] and stop['longitude']]
+        if points:
+            html = self.generate_yandex_map_html(points, '4d5eb61f-4a3e-4ddc-91e4-736be3b4fc63')
+            self.route_map_view.setHtml(html)
+        else:
+            self.route_map_view.setHtml("<h3>Нет координат для построения маршрута</h3>")
     
     def load_booking_routes(self):
-        routes = self.db.fetch_all("SELECT id, route_number, route_name FROM routes ORDER BY route_number")
+        # Только нерегулярные рейсы (is_regular = false/0)
+        routes = self.db.fetch_all(
+            "SELECT id, route_number, route_name FROM routes WHERE is_regular = 0 ORDER BY route_number"
+        )
         self.booking_route_combo.clear()
         for route in routes:
             self.booking_route_combo.addItem(f"{route['route_number']} - {route['route_name']}", route['id'])
-        
+
         self.booking_route_combo.currentIndexChanged.connect(self.update_stop_combos)
     
     def update_stop_combos(self):
@@ -246,7 +294,14 @@ class BusDepotApp(QMainWindow):
             return
         
         # Получаем информацию о маршруте для расчета стоимости
+        route_id = self.booking_route_combo.currentData()
+        print("route_id:", route_id)
+        if not route_id:
+            QMessageBox.warning(self, "Ошибка", "Не выбран маршрут")
+            return
+
         route = self.db.fetch_one("SELECT distance_km FROM routes WHERE id = %s", (route_id,))
+        print("Route:", route)
         if not route:
             QMessageBox.warning(self, "Ошибка", "Маршрут не найден")
             return
@@ -332,3 +387,49 @@ class BusDepotApp(QMainWindow):
     def closeEvent(self, event):
         self.db.close()
         event.accept()
+
+    def generate_yandex_map_html(self, points, api_key):
+        # points: [(lat, lon), ...]
+        points_js = ','.join(f'[{lat},{lon}]' for lat, lon in points)
+        center = points[0] if points else [55.75, 37.61]  # Москва по умолчанию
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8" />
+            <title>Маршрут на Яндекс.Карте</title>
+            <script src="https://api-maps.yandex.ru/2.1/?apikey={api_key}&lang=ru_RU"></script>
+            <style>
+                html, body, #map {{
+                    width: 100%; height: 100%; margin: 0; padding: 0;
+                }}
+            </style>
+        </head>
+        <body>
+            <div id="map"></div>
+            <script>
+                ymaps.ready(function () {{
+                    var map = new ymaps.Map('map', {{
+                        center: [{center[0]}, {center[1]}],
+                        zoom: 12
+                    }});
+                    var points = [{points_js}];
+                    if (points.length > 1) {{
+                        var multiRoute = new ymaps.multiRouter.MultiRoute({{
+                            referencePoints: points,
+                            params: {{
+                                routingMode: 'auto'
+                            }}
+                        }}, {{
+                            boundsAutoApply: true
+                        }});
+                        map.geoObjects.add(multiRoute);
+                    }} else if (points.length === 1) {{
+                        map.geoObjects.add(new ymaps.Placemark(points[0]));
+                    }}
+                }});
+            </script>
+        </body>
+        </html>
+        """
+        return html
