@@ -1,20 +1,23 @@
 from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QMainWindow, QWidget, QVBoxLayout, 
     QLabel, QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
     QComboBox, QMessageBox, QTabWidget, QDateTimeEdit,QShortcut,QDialog
 )
-from PyQt5.QtCore import Qt, QDateTime
+from PyQt5.QtCore import  QDateTime
 from PyQt5.QtGui import QKeySequence, QIcon
 from db import Database
 from admin import AdminLoginDialog,AdminPanel
 from WelcomeDialog import WelcomeDialog
 from PyQt5.QtWebEngineWidgets import QWebEngineView
-import folium
 import os
-from PyQt5.QtCore import QUrl
 from ManagerPanel import ManagerPanel
+from dotenv import load_dotenv
+import os
 
+from Auth import AuthDialog
 class BusDepotApp(QMainWindow):
+    load_dotenv()
+    YANDEX_API_KEY = os.getenv("YANDEX_API_KEY").replace('"', '').replace("'", "")
     def __init__(self):
         super().__init__()
         self.db = Database()
@@ -58,10 +61,19 @@ class BusDepotApp(QMainWindow):
     
      
     def show_admin_login(self):
-        login_dialog = AdminLoginDialog(self)
-        if login_dialog.exec_() == QDialog.Accepted:
-            admin_panel = AdminPanel(self.db, self)
-            admin_panel.exec_()
+        auth_dialog = AuthDialog(self)
+        if auth_dialog.exec_() == QDialog.Accepted:
+            # В зависимости от роли открываем нужную панель
+            if auth_dialog.user_role == "администратор":
+                from admin import AdminPanel
+                admin_panel = AdminPanel(self.db, self)
+                admin_panel.exec_()
+            elif auth_dialog.user_role in ("диспетчер", "manager"):
+                from ManagerPanel import ManagerPanel
+                manager_panel = ManagerPanel(self.db, self)
+                manager_panel.exec_()
+            else:
+                QMessageBox.information(self, "Вход", "Вход выполнен, но нет отдельной панели для вашей роли.")
 
     def show_manager_panel(self):
         manager_panel = ManagerPanel(self.db, self)
@@ -258,7 +270,7 @@ class BusDepotApp(QMainWindow):
         self.stops_table.resizeColumnsToContents()
         points = [(stop['latitude'], stop['longitude']) for stop in stops if stop['latitude'] and stop['longitude']]
         if points:
-            html = self.generate_yandex_map_html(points, '4d5eb61f-4a3e-4ddc-91e4-736be3b4fc63')
+            html = self.generate_yandex_map_html(points, self.YANDEX_API_KEY)
             self.route_map_view.setHtml(html)
         else:
             self.route_map_view.setHtml("<h3>Нет координат для построения маршрута</h3>")
@@ -312,12 +324,9 @@ class BusDepotApp(QMainWindow):
                 points.append((stop['latitude'], stop['longitude']))
                 #print(points)
         # Карта остановок
-        from dotenv import load_dotenv
-        import os
-        load_dotenv()
-        api_key = os.getenv("YANDEX_API_KEY").replace('"', '').replace("'", "")
+
         if points:
-            html = self.generate_yandex_map_html(points, api_key)
+            html = self.generate_yandex_map_html(points, self.YANDEX_API_KEY)
             self.booking_map_view.setHtml(html)
         else:
             self.booking_map_view.setHtml("<h3>Нет координат для построения карты</h3>")

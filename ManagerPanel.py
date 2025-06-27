@@ -2,8 +2,8 @@ import requests
 import os
 from dotenv import load_dotenv
 from PyQt5.QtWidgets import (
-    QDialog, QVBoxLayout, QTabWidget, QWidget, QLabel, QPushButton, QHBoxLayout,
-    QTableWidget, QTableWidgetItem, QComboBox, QLineEdit, QMessageBox, QFormLayout, QInputDialog,
+    QDialog, QVBoxLayout, QTabWidget, QWidget, QLabel, QPushButton, 
+    QTableWidget, QTableWidgetItem, QComboBox, QLineEdit, QMessageBox, QFormLayout, 
     QDialogButtonBox
 )
 from PyQt5.QtCore import Qt
