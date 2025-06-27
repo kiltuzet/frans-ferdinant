@@ -3,7 +3,8 @@ from PyQt5.QtWidgets import (
     QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
     QComboBox, QMessageBox, QTabWidget, QDialog,
     QDialogButtonBox, QFormLayout,QTreeWidget,
-    QTreeWidgetItem,QAction,QMenu
+    QTreeWidgetItem,QAction,QMenu,
+    QLabel
 )
 from PyQt5.QtCore import Qt
 from db import Database
@@ -63,13 +64,14 @@ class AdminPanel(QDialog):
         self.db = db
         self.setWindowTitle("Панель администратора")
         self.setMinimumSize(1000, 700)
-        
+        self.page_size = 100
+        self.current_page = 0
+        self.current_table = None  # Для хранения выбранной таблицы
         self.init_ui()
         self.load_users()
         self.load_database_structure()
-        # Устанавливаем фильтр событий на дерево БД
         self.db_tree.installEventFilter(self)
-    
+
     def init_ui(self):
         self.tabs = QTabWidget()
         self.tabs.tabBar().setExpanding(True)  # табы будут занимать всё доступное пространство
@@ -119,6 +121,18 @@ class AdminPanel(QDialog):
         # Таблица данных
         self.data_table = QTableWidget()
         db_layout.addWidget(self.data_table)
+
+        # --- КОНТРОЛЫ ПАГИНАЦИИ ---
+        self.pagination_layout = QHBoxLayout()
+        self.prev_btn = QPushButton("Назад")
+        self.next_btn = QPushButton("Вперёд")
+        self.page_label = QLabel("Страница 1")
+        self.prev_btn.clicked.connect(self.prev_page)
+        self.next_btn.clicked.connect(self.next_page)
+        self.pagination_layout.addWidget(self.prev_btn)
+        self.pagination_layout.addWidget(self.page_label)
+        self.pagination_layout.addWidget(self.next_btn)
+        db_layout.addLayout(self.pagination_layout)
         
         # Добавляем вкладки
         self.tabs.addTab(users_tab, "Управление пользователями")
@@ -353,18 +367,24 @@ class AdminPanel(QDialog):
                     return True
         return super().eventFilter(obj, event)
 
-    def show_table_data(self, item, column):
+    def show_table_data(self, item, column, page=None):
         table_name = item.data(0, Qt.UserRole)
-        if not table_name:
+        if not table_name or not isinstance(table_name, str):
             return
-        # Не показываем для корня
-        if not isinstance(table_name, str):
-            return
-        # Получаем данные
-        rows = self.db.fetch_all(f"SELECT * FROM {table_name}")
-        if not rows:
+        self.current_table = table_name
+        if page is None:
+            self.current_page = 0
+        offset = self.current_page * self.page_size
+        print(f"Показываем данные таблицы: {table_name}, страница: {self.current_page }, смещение: {offset}")
+        rows = self.db.fetch_all(
+            f"SELECT * FROM {table_name} LIMIT %s OFFSET %s", (self.page_size, offset)
+        )
+        print(f"Получено строк: {len(rows)}")
+        if len(rows)==0:
             self.data_table.setRowCount(0)
             self.data_table.setColumnCount(0)
+            self.page_label.setText(f"Страница {self.current_page + 1}")
+            print("Нет данных для отображения")
             return
         self.data_table.setColumnCount(len(rows[0]))
         self.data_table.setHorizontalHeaderLabels(rows[0].keys())
@@ -373,8 +393,35 @@ class AdminPanel(QDialog):
             for col_idx, key in enumerate(row):
                 self.data_table.setItem(row_idx, col_idx, QTableWidgetItem(str(row[key])))
         self.data_table.resizeColumnsToContents()
+        self.page_label.setText(f"Страница {self.current_page + 1}")
+        
+    #пагинация вперед
+    def next_page(self):
+        if not self.current_table:
+            print("Нет выбранной таблицы")
+            return
+        # Проверяем, есть ли данные на следующей странице
+        offset = (self.current_page + 1) * self.page_size
+        rows = self.db.fetch_all(
+            f"SELECT * FROM {self.current_table} LIMIT %s OFFSET %s", (self.page_size, offset)
+        )
+        if not rows:
+            QMessageBox.information(self, "Информация", "Больше нет данных для отображения.")
+            return
+        self.current_page += 1
+        item = QTreeWidgetItem([self.current_table])
+        item.setData(0, Qt.UserRole, self.current_table)
+        self.show_table_data(item, 0, self.current_page)
+        print(self.current_page)
 
-        self.db_tree.itemClicked.connect(self.show_table_data)
+    #пагинация назад
+    def prev_page(self):
+        if not self.current_table or self.current_page == 0:
+            return
+        self.current_page -= 1
+        item = QTreeWidgetItem([self.current_table])
+        item.setData(0, Qt.UserRole, self.current_table)
+        self.show_table_data(item, 0, self.current_page)
 
 class BusDepotApp(QMainWindow):
     def __init__(self):
