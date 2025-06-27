@@ -36,8 +36,11 @@ class ManagerPanel(QDialog):
         btn_update_stops.clicked.connect(self.load_stops)
         btn_add_stop = QPushButton("Добавить остановку")
         btn_add_stop.clicked.connect(self.add_stop_dialog)
+        btn_edit_stop = QPushButton("Редактировать остановку")
+        btn_edit_stop.clicked.connect(self.edit_stop_dialog)
         self.stops_layout.addWidget(btn_update_stops)
         self.stops_layout.addWidget(btn_add_stop)
+        self.stops_layout.addWidget(btn_edit_stop)
         self.tabs.addTab(self.stops_tab, "Остановки")
 
         # Вкладка маршрутов
@@ -162,6 +165,82 @@ class ManagerPanel(QDialog):
             dialog.accept()
         except Exception as e:
             QMessageBox.critical(dialog, "Ошибка", f"Не удалось добавить остановку: {str(e)}")
+
+    def edit_stop_dialog(self):
+        selected_row = self.stops_table.currentRow()
+        if selected_row < 0:
+            QMessageBox.warning(self, "Ошибка", "Выберите остановку для редактирования")
+            return
+
+        stop_id = self.stops_table.item(selected_row, 0).text()
+        stop = self.db.fetch_one("SELECT id, name, address, latitude, longitude FROM stops WHERE id = %s", (stop_id,))
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Редактировать остановку")
+        layout = QFormLayout(dialog)
+        name_input = QLineEdit(stop['name'])
+        address_input = QLineEdit(stop['address'])
+        layout.addRow("Название:", name_input)
+        layout.addRow("Адрес:", address_input)
+        btn_geocode = QPushButton("Получить координаты")
+        coords_label = QLabel(f"Широта: {stop['latitude']}, Долгота: {stop['longitude']}")
+        lat, lon = [stop['latitude']], [stop['longitude']]
+
+        def geocode():
+            address = address_input.text().strip()
+            if not address:
+                QMessageBox.warning(dialog, "Ошибка", "Введите адрес")
+                return
+            yandex_url = "https://geocode-maps.yandex.ru/1.x/"
+            params = {
+                "apikey": YANDEX_API_KEY,
+                "geocode": address,
+                "format": "json"
+            }
+            try:
+                resp = requests.get(yandex_url, params=params, timeout=5)
+                resp.raise_for_status()
+                geo = resp.json()
+                pos = geo['response']['GeoObjectCollection']['featureMember'][0]['GeoObject']['Point']['pos']
+                lon[0], lat[0] = map(float, pos.split())
+                coords_label.setText(f"Широта: {lat[0]}, Долгота: {lon[0]}")
+            except Exception:
+                coords_label.setText("Ошибка геокодирования")
+        btn_geocode.clicked.connect(geocode)
+        layout.addRow(btn_geocode, coords_label)
+
+        btn_pick_on_map = QPushButton("Выбрать на карте")
+        layout.addRow(btn_pick_on_map)
+        lat, lon = [stop['latitude']], [stop['longitude']]
+
+        def pick_on_map():
+            coords = MapPointDialog.get_point(YANDEX_API_KEY, dialog)
+            if coords:
+                lat[0], lon[0] = coords
+                coords_label.setText(f"Широта: {lat[0]}, Долгота: {lon[0]}")
+
+        btn_pick_on_map.clicked.connect(pick_on_map)
+        layout.addRow(btn_pick_on_map, coords_label)
+
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.accepted.connect(lambda: self.update_stop(dialog, stop_id, name_input.text(), address_input.text(), lat[0], lon[0]))
+        btns.rejected.connect(dialog.reject)
+        layout.addWidget(btns)
+        dialog.exec_()
+
+    def update_stop(self, dialog, stop_id, name, address, lat, lon):
+        if not name or not address or lat is None or lon is None:
+            QMessageBox.warning(dialog, "Ошибка", "Заполните все поля и получите координаты")
+            return
+        try:
+            self.db.execute_query(
+                "UPDATE stops SET name = %s, address = %s, latitude = %s, longitude = %s WHERE id = %s",
+                (name, address, lat, lon, stop_id)
+            )
+            self.load_stops()
+            dialog.accept()
+        except Exception as e:
+            QMessageBox.critical(dialog, "Ошибка", f"Не удалось обновить остановку: {str(e)}")
 
     # --- CRUD для маршрутов ---
     def load_routes(self):
@@ -290,6 +369,17 @@ class ManagerPanel(QDialog):
             for col, key in enumerate(assignment):
                 self.assignments_table.setItem(row, col, QTableWidgetItem(str(assignment[key])))
         self.assignments_table.resizeColumnsToContents()
+
+    def has_permission(self, table, action):
+        # action: 'can_update', 'can_insert', 'can_delete', 'can_select'
+        user_id = self.parent().user_id if hasattr(self.parent(), 'user_id') else None
+        if not user_id:
+            return False
+        perm = self.db.fetch_one(
+            "SELECT {0} FROM user_permissions WHERE user_id = %s AND table_name = %s".format(action),
+            (user_id, table)
+        )
+        return perm and perm.get(action) == 1
 
 class MapPointDialog(QDialog):
     def __init__(self, api_key, parent=None):

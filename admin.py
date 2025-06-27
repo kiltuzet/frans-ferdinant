@@ -113,7 +113,12 @@ class AdminPanel(QDialog):
         self.db_tree.setHeaderLabel("Структура базы данных")
         self.db_tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.db_tree.customContextMenuRequested.connect(self.show_db_context_menu)
+        self.db_tree.itemClicked.connect(self.show_table_data)  # <-- добавьте эту строку
         db_layout.addWidget(self.db_tree)
+        
+        # Таблица данных
+        self.data_table = QTableWidget()
+        db_layout.addWidget(self.data_table)
         
         # Добавляем вкладки
         self.tabs.addTab(users_tab, "Управление пользователями")
@@ -347,6 +352,29 @@ class AdminPanel(QDialog):
                             QMessageBox.critical(self, "Ошибка", str(e))
                     return True
         return super().eventFilter(obj, event)
+
+    def show_table_data(self, item, column):
+        table_name = item.data(0, Qt.UserRole)
+        if not table_name:
+            return
+        # Не показываем для корня
+        if not isinstance(table_name, str):
+            return
+        # Получаем данные
+        rows = self.db.fetch_all(f"SELECT * FROM {table_name}")
+        if not rows:
+            self.data_table.setRowCount(0)
+            self.data_table.setColumnCount(0)
+            return
+        self.data_table.setColumnCount(len(rows[0]))
+        self.data_table.setHorizontalHeaderLabels(rows[0].keys())
+        self.data_table.setRowCount(len(rows))
+        for row_idx, row in enumerate(rows):
+            for col_idx, key in enumerate(row):
+                self.data_table.setItem(row_idx, col_idx, QTableWidgetItem(str(row[key])))
+        self.data_table.resizeColumnsToContents()
+
+        self.db_tree.itemClicked.connect(self.show_table_data)
 
 class BusDepotApp(QMainWindow):
     def __init__(self):
