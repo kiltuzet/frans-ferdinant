@@ -15,9 +15,10 @@ load_dotenv()
 YANDEX_API_KEY = os.getenv("YANDEX_API_KEY").replace('"', '').replace("'", "")
 
 class ManagerPanel(QDialog):
-    def __init__(self, db, parent=None):
+    def __init__(self, db, parent=None, user_id=None):
         super().__init__(parent)
         self.db = db
+        self.user_id = user_id  # сохраняем user_id
         self.setWindowTitle("Панель диспетчера")
         self.setMinimumSize(1100, 700)
         self.init_ui()
@@ -38,9 +39,12 @@ class ManagerPanel(QDialog):
         btn_add_stop.clicked.connect(self.add_stop_dialog)
         btn_edit_stop = QPushButton("Редактировать остановку")
         btn_edit_stop.clicked.connect(self.edit_stop_dialog)
+        btn_delete_stop = QPushButton("Удалить остановку")
+        btn_delete_stop.clicked.connect(self.delete_stop)
         self.stops_layout.addWidget(btn_update_stops)
         self.stops_layout.addWidget(btn_add_stop)
         self.stops_layout.addWidget(btn_edit_stop)
+        self.stops_layout.addWidget(btn_delete_stop)
         self.tabs.addTab(self.stops_tab, "Остановки")
 
         # Вкладка маршрутов
@@ -52,8 +56,14 @@ class ManagerPanel(QDialog):
         btn_update_routes.clicked.connect(self.load_routes)
         btn_add_route = QPushButton("Добавить маршрут")
         btn_add_route.clicked.connect(self.add_route_dialog)
+        btn_edit_route = QPushButton("Редактировать маршрут")
+        btn_edit_route.clicked.connect(self.edit_route_dialog)
+        btn_delete_route = QPushButton("Удалить маршрут")
+        btn_delete_route.clicked.connect(self.delete_route)
         self.routes_layout.addWidget(btn_update_routes)
         self.routes_layout.addWidget(btn_add_route)
+        self.routes_layout.addWidget(btn_edit_route)
+        self.routes_layout.addWidget(btn_delete_route)
         self.tabs.addTab(self.routes_tab, "Маршруты")
 
         # Вкладка остановок на маршруте
@@ -65,8 +75,14 @@ class ManagerPanel(QDialog):
         btn_update_route_stops.clicked.connect(self.load_route_stops)
         btn_add_route_stop = QPushButton("Добавить точку на маршрут")
         btn_add_route_stop.clicked.connect(self.add_route_stop_dialog)
+        btn_edit_route_stop = QPushButton("Редактировать точку на маршруте")
+        btn_edit_route_stop.clicked.connect(self.edit_route_stop_dialog)
+        btn_delete_route_stop = QPushButton("Удалить точку на маршруте")
+        btn_delete_route_stop.clicked.connect(self.delete_route_stop)
         self.route_stops_layout.addWidget(btn_update_route_stops)
         self.route_stops_layout.addWidget(btn_add_route_stop)
+        self.route_stops_layout.addWidget(btn_edit_route_stop)
+        self.route_stops_layout.addWidget(btn_delete_route_stop)
         self.tabs.addTab(self.route_stops_tab, "Остановки на маршруте")
 
         # Вкладка назначений
@@ -76,7 +92,16 @@ class ManagerPanel(QDialog):
         self.assignments_layout.addWidget(self.assignments_table)
         btn_update_assignments = QPushButton("Обновить назначения")
         btn_update_assignments.clicked.connect(self.load_assignments)
+        btn_add_assignment = QPushButton("Добавить назначение")
+        btn_add_assignment.clicked.connect(self.add_assignment_dialog)
+        btn_edit_assignment = QPushButton("Редактировать назначение")
+        btn_edit_assignment.clicked.connect(self.edit_assignment_dialog)
+        btn_delete_assignment = QPushButton("Удалить назначение")
+        btn_delete_assignment.clicked.connect(self.delete_assignment)
         self.assignments_layout.addWidget(btn_update_assignments)
+        self.assignments_layout.addWidget(btn_add_assignment)
+        self.assignments_layout.addWidget(btn_edit_assignment)
+        self.assignments_layout.addWidget(btn_delete_assignment)
         self.tabs.addTab(self.assignments_tab, "Назначения")
 
         self.load_stops()
@@ -167,6 +192,9 @@ class ManagerPanel(QDialog):
             QMessageBox.critical(dialog, "Ошибка", f"Не удалось добавить остановку: {str(e)}")
 
     def edit_stop_dialog(self):
+        if not self.has_permission('stops', 'can_update'):
+            QMessageBox.warning(self, "Нет доступа", "У вас нет прав на редактирование остановок.")
+            return
         selected_row = self.stops_table.currentRow()
         if selected_row < 0:
             QMessageBox.warning(self, "Ошибка", "Выберите остановку для редактирования")
@@ -209,19 +237,6 @@ class ManagerPanel(QDialog):
         btn_geocode.clicked.connect(geocode)
         layout.addRow(btn_geocode, coords_label)
 
-        btn_pick_on_map = QPushButton("Выбрать на карте")
-        layout.addRow(btn_pick_on_map)
-        lat, lon = [stop['latitude']], [stop['longitude']]
-
-        def pick_on_map():
-            coords = MapPointDialog.get_point(YANDEX_API_KEY, dialog)
-            if coords:
-                lat[0], lon[0] = coords
-                coords_label.setText(f"Широта: {lat[0]}, Долгота: {lon[0]}")
-
-        btn_pick_on_map.clicked.connect(pick_on_map)
-        layout.addRow(btn_pick_on_map, coords_label)
-
         btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         btns.accepted.connect(lambda: self.update_stop(dialog, stop_id, name_input.text(), address_input.text(), lat[0], lon[0]))
         btns.rejected.connect(dialog.reject)
@@ -241,6 +256,50 @@ class ManagerPanel(QDialog):
             dialog.accept()
         except Exception as e:
             QMessageBox.critical(dialog, "Ошибка", f"Не удалось обновить остановку: {str(e)}")
+
+    def has_permission(self, table, action):
+        user_id = self.user_id  # теперь берём user_id напрямую
+        if not user_id:
+            return False
+        perm = self.db.fetch_one(
+            f"SELECT {action} FROM user_permissions WHERE user_id = %s AND table_name = %s",
+            (user_id, table)
+        )
+        return perm and perm.get(action) == 1
+
+    def delete_stop(self):
+        if not self.has_permission('stops', 'can_delete'):
+            QMessageBox.warning(self, "Нет доступа", "У вас нет прав на удаление остановок.")
+            return
+        row = self.stops_table.currentRow()
+        if row < 0:
+            QMessageBox.warning(self, "Ошибка", "Выберите остановку для удаления.")
+            return
+        stop_id = self.stops_table.item(row, 0).text()
+        reply = QMessageBox.question(self, "Удалить", "Удалить выбранную остановку?", QMessageBox.Yes | QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            try:
+                self.db.execute_query("DELETE FROM stops WHERE id = %s", (stop_id,))
+                self.load_stops()
+            except Exception as e:
+                QMessageBox.critical(self, "Ошибка", f"Не удалось удалить остановку: {str(e)}")
+                
+    def delete_route_stop(self):
+        if not self.has_permission('route_stops', 'can_delete'):
+            QMessageBox.warning(self, "Нет доступа", "У вас нет прав на удаление.")
+            return
+        row = self.route_stops_table.currentRow()
+        if row < 0:
+            QMessageBox.warning(self, "Ошибка", "Выберите точку для удаления.")
+            return
+        route_stop_id = self.route_stops_table.item(row, 0).text()
+        reply = QMessageBox.question(self, "Удалить", "Удалить выбранную точку?", QMessageBox.Yes | QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            try:
+                self.db.execute_query("DELETE FROM route_stops WHERE id = %s", (route_stop_id,))
+                self.load_route_stops()
+            except Exception as e:
+                QMessageBox.critical(self, "Ошибка", f"Не удалось удалить точку: {str(e)}")
 
     # --- CRUD для маршрутов ---
     def load_routes(self):
@@ -296,6 +355,62 @@ class ManagerPanel(QDialog):
             dialog.accept()
         except Exception as e:
             QMessageBox.critical(dialog, "Ошибка", f"Не удалось добавить маршрут: {str(e)}")
+
+    def edit_route_dialog(self):
+        if not self.has_permission('routes', 'can_update'):
+            QMessageBox.warning(self, "Нет доступа", "У вас нет прав на редактирование маршрутов.")
+            return
+        selected_row = self.routes_table.currentRow()
+        if selected_row < 0:
+            QMessageBox.warning(self, "Ошибка", "Выберите маршрут для редактирования")
+            return
+
+        route_id = self.routes_table.item(selected_row, 0).text()
+        route = self.db.fetch_one("SELECT id, route_number, route_name FROM routes WHERE id = %s", (route_id,))
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Редактировать маршрут")
+        layout = QFormLayout(dialog)
+        route_number_input = QLineEdit(route['route_number'])
+        route_name_input = QLineEdit(route['route_name'])
+        layout.addRow("Номер маршрута:", route_number_input)
+        layout.addRow("Название маршрута:", route_name_input)
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.accepted.connect(lambda: self.update_route(dialog, route_id, route_number_input.text(), route_name_input.text()))
+        btns.rejected.connect(dialog.reject)
+        layout.addWidget(btns)
+        dialog.exec_()
+
+    def update_route(self, dialog, route_id, route_number, route_name):
+        if not route_number or not route_name:
+            QMessageBox.warning(dialog, "Ошибка", "Заполните все поля")
+            return
+        try:
+            self.db.execute_query(
+                "UPDATE routes SET route_number = %s, route_name = %s WHERE id = %s",
+                (route_number, route_name, route_id)
+            )
+            self.load_routes()
+            dialog.accept()
+        except Exception as e:
+            QMessageBox.critical(dialog, "Ошибка", f"Не удалось обновить маршрут: {str(e)}")
+
+    def delete_route(self):
+        if not self.has_permission('routes', 'can_delete'):
+            QMessageBox.warning(self, "Нет доступа", "У вас нет прав на удаление маршрутов.")
+            return
+        row = self.routes_table.currentRow()
+        if row < 0:
+            QMessageBox.warning(self, "Ошибка", "Выберите маршрут для удаления.")
+            return
+        route_id = self.routes_table.item(row, 0).text()
+        reply = QMessageBox.question(self, "Удалить", "Удалить выбранный маршрут?", QMessageBox.Yes | QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            try:
+                self.db.execute_query("DELETE FROM routes WHERE id = %s", (route_id,))
+                self.load_routes()
+            except Exception as e:
+                QMessageBox.critical(self, "Ошибка", f"Не удалось удалить маршрут: {str(e)}")
 
     # --- CRUD для остановок на маршруте ---
     def load_route_stops(self):
@@ -359,6 +474,68 @@ class ManagerPanel(QDialog):
         except Exception as e:
             QMessageBox.critical(dialog, "Ошибка", f"Не удалось добавить остановку на маршрут: {str(e)}")
 
+    def edit_route_stop_dialog(self):
+        if not self.has_permission('route_stops', 'can_update'):
+            QMessageBox.warning(self, "Нет доступа", "У вас нет прав на редактирование.")
+            return
+        selected_row = self.route_stops_table.currentRow()
+        if selected_row < 0:
+            QMessageBox.warning(self, "Ошибка", "Выберите точку для редактирования")
+            return
+
+        route_stop_id = self.route_stops_table.item(selected_row, 0).text()
+        route_stop = self.db.fetch_one("SELECT id, id_route, id_stop, stop_order FROM route_stops WHERE id = %s", (route_stop_id,))
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Редактировать точку на маршруте")
+        layout = QFormLayout(dialog)
+
+        # Выбор маршрута
+        routes = self.db.fetch_all("SELECT id, route_number FROM routes ORDER BY route_number")
+        route_combo = QComboBox()
+        for route in routes:
+            route_combo.addItem(str(route['route_number']), route['id'])
+        route_combo.setCurrentIndex(next((i for i, r in enumerate(routes) if r['id'] == route_stop['id_route']), 0))
+
+        # Выбор остановки
+        stops = self.db.fetch_all("SELECT id, name FROM stops ORDER BY name")
+        stop_combo = QComboBox()
+        for stop in stops:
+            stop_combo.addItem(stop['name'], stop['id'])
+        stop_combo.setCurrentIndex(next((i for i, s in enumerate(stops) if s['id'] == route_stop['id_stop']), 0))
+
+        stop_order_input = QLineEdit(str(route_stop['stop_order']))
+
+        layout.addRow("Маршрут:", route_combo)
+        layout.addRow("Остановка:", stop_combo)
+        layout.addRow("Порядок:", stop_order_input)
+
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.accepted.connect(lambda: self.update_route_stop(
+            dialog,
+            route_stop_id,
+            route_combo.currentData(),
+            stop_combo.currentData(),
+            stop_order_input.text()
+        ))
+        btns.rejected.connect(dialog.reject)
+        layout.addWidget(btns)
+        dialog.exec_()
+
+    def update_route_stop(self, dialog, route_stop_id, id_route, id_stop, stop_order):
+        if not id_route or not id_stop or not stop_order.isdigit():
+            QMessageBox.warning(dialog, "Ошибка", "Заполните все поля корректно")
+            return
+        try:
+            self.db.execute_query(
+                "UPDATE route_stops SET id_route = %s, id_stop = %s, stop_order = %s WHERE id = %s",
+                (id_route, id_stop, int(stop_order), route_stop_id)
+            )
+            self.load_route_stops()
+            dialog.accept()
+        except Exception as e:
+            QMessageBox.critical(dialog, "Ошибка", f"Не удалось обновить точку: {str(e)}")
+
     # --- CRUD для назначений ---
     def load_assignments(self):
         assignments = self.db.fetch_all("SELECT * FROM bus_assignments ORDER BY id")
@@ -370,16 +547,156 @@ class ManagerPanel(QDialog):
                 self.assignments_table.setItem(row, col, QTableWidgetItem(str(assignment[key])))
         self.assignments_table.resizeColumnsToContents()
 
-    def has_permission(self, table, action):
-        # action: 'can_update', 'can_insert', 'can_delete', 'can_select'
-        user_id = self.parent().user_id if hasattr(self.parent(), 'user_id') else None
-        if not user_id:
-            return False
-        perm = self.db.fetch_one(
-            "SELECT {0} FROM user_permissions WHERE user_id = %s AND table_name = %s".format(action),
-            (user_id, table)
-        )
-        return perm and perm.get(action) == 1
+    def add_assignment_dialog(self):
+        if not self.has_permission('bus_assignments', 'can_insert'):
+            QMessageBox.warning(self, "Нет доступа", "У вас нет прав на добавление назначений.")
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Добавить назначение")
+        layout = QFormLayout(dialog)
+
+        routes = self.db.fetch_all("SELECT id, route_number FROM routes ORDER BY route_number")
+        route_combo = QComboBox()
+        for route in routes:
+            route_combo.addItem(str(route['route_number']), route['id'])
+
+        buses = self.db.fetch_all("SELECT id, mark, model, registration_number FROM buses ORDER BY id")
+        bus_combo = QComboBox()
+        for bus in buses:
+            bus_combo.addItem(f"{bus['mark']} {bus['model']} ({bus['registration_number']})", bus['id'])
+
+        assignment_date_input = QLineEdit()
+        start_time_input = QLineEdit()
+        end_time_input = QLineEdit()
+        status_combo = QComboBox()
+        for status in ['scheduled', 'in_progress', 'completed', 'cancelled']:
+            status_combo.addItem(status)
+
+        layout.addRow("Маршрут:", route_combo)
+        layout.addRow("Автобус:", bus_combo)
+        layout.addRow("Дата назначения:", assignment_date_input)
+        layout.addRow("Время начала:", start_time_input)
+        layout.addRow("Время окончания:", end_time_input)
+        layout.addRow("Статус:", status_combo)
+
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.accepted.connect(lambda: self.save_assignment(
+            dialog,
+            route_combo.currentData(),
+            bus_combo.currentData(),
+            assignment_date_input.text(),
+            start_time_input.text(),
+            end_time_input.text(),
+            status_combo.currentText()
+        ))
+        btns.rejected.connect(dialog.reject)
+        layout.addWidget(btns)
+        dialog.exec_()
+
+    def save_assignment(self, dialog, id_route, id_bus, assignment_date, start_time, end_time, status):
+        if not id_route or not id_bus or not assignment_date or not start_time or not end_time or not status:
+            QMessageBox.warning(dialog, "Ошибка", "Заполните все поля")
+            return
+        try:
+            self.db.execute_query(
+                "INSERT INTO bus_assignments (id_route, id_bus, assignment_date, start_time, end_time, status) VALUES (%s, %s, %s, %s, %s, %s)",
+                (id_route, id_bus, assignment_date, start_time, end_time, status)
+            )
+            self.load_assignments()
+            dialog.accept()
+        except Exception as e:
+            QMessageBox.critical(dialog, "Ошибка", f"Не удалось добавить назначение: {str(e)}")
+
+    def edit_assignment_dialog(self):
+        if not self.has_permission('bus_assignments', 'can_update'):
+            QMessageBox.warning(self, "Нет доступа", "У вас нет прав на редактирование назначений.")
+            return
+        selected_row = self.assignments_table.currentRow()
+        if selected_row < 0:
+            QMessageBox.warning(self, "Ошибка", "Выберите назначение для редактирования")
+            return
+
+        assignment_id = self.assignments_table.item(selected_row, 0).text()
+        assignment = self.db.fetch_one("SELECT * FROM bus_assignments WHERE id = %s", (assignment_id,))
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Редактировать назначение")
+        layout = QFormLayout(dialog)
+
+        # Маршрут
+        routes = self.db.fetch_all("SELECT id, route_number FROM routes ORDER BY route_number")
+        route_combo = QComboBox()
+        for route in routes:
+            route_combo.addItem(str(route['route_number']), route['id'])
+        route_combo.setCurrentIndex(next((i for i, r in enumerate(routes) if r['id'] == assignment['id_route']), 0))
+
+        # Автобус
+        buses = self.db.fetch_all("SELECT id, mark, model, registration_number FROM buses ORDER BY id")
+        bus_combo = QComboBox()
+        for bus in buses:
+            bus_combo.addItem(f"{bus['mark']} {bus['model']} ({bus['registration_number']})", bus['id'])
+        bus_combo.setCurrentIndex(next((i for i, b in enumerate(buses) if b['id'] == assignment['id_bus']), 0))
+
+        assignment_date_input = QLineEdit(str(assignment['assignment_date']))
+        start_time_input = QLineEdit(str(assignment['start_time']))
+        end_time_input = QLineEdit(str(assignment['end_time']))
+        status_combo = QComboBox()
+        for status in ['scheduled', 'in_progress', 'completed', 'cancelled']:
+            status_combo.addItem(status)
+        status_combo.setCurrentText(assignment['status'])
+
+        layout.addRow("Маршрут:", route_combo)
+        layout.addRow("Автобус:", bus_combo)
+        layout.addRow("Дата назначения:", assignment_date_input)
+        layout.addRow("Время начала:", start_time_input)
+        layout.addRow("Время окончания:", end_time_input)
+        layout.addRow("Статус:", status_combo)
+
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.accepted.connect(lambda: self.update_assignment(
+            dialog,
+            assignment_id,
+            route_combo.currentData(),
+            bus_combo.currentData(),
+            assignment_date_input.text(),
+            start_time_input.text(),
+            end_time_input.text(),
+            status_combo.currentText()
+        ))
+        btns.rejected.connect(dialog.reject)
+        layout.addWidget(btns)
+        dialog.exec_()
+
+    def update_assignment(self, dialog, assignment_id, id_route, id_bus, assignment_date, start_time, end_time, status):
+        if not id_route or not id_bus or not assignment_date or not start_time or not end_time or not status:
+            QMessageBox.warning(dialog, "Ошибка", "Заполните все поля")
+            return
+        try:
+            self.db.execute_query(
+                "UPDATE bus_assignments SET id_route = %s, id_bus = %s, assignment_date = %s, start_time = %s, end_time = %s, status = %s WHERE id = %s",
+                (id_route, id_bus, assignment_date, start_time, end_time, status, assignment_id)
+            )
+            self.load_assignments()
+            dialog.accept()
+        except Exception as e:
+            QMessageBox.critical(dialog, "Ошибка", f"Не удалось обновить назначение: {str(e)}")
+
+    def delete_assignment(self):
+        if not self.has_permission('bus_assignments', 'can_delete'):
+            QMessageBox.warning(self, "Нет доступа", "У вас нет прав на удаление.")
+            return
+        row = self.assignments_table.currentRow()
+        if row < 0:
+            QMessageBox.warning(self, "Ошибка", "Выберите назначение для удаления.")
+            return
+        assignment_id = self.assignments_table.item(row, 0).text()
+        reply = QMessageBox.question(self, "Удалить", "Удалить выбранное назначение?", QMessageBox.Yes | QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            try:
+                self.db.execute_query("DELETE FROM bus_assignments WHERE id = %s", (assignment_id,))
+                self.load_assignments()
+            except Exception as e:
+                QMessageBox.critical(self, "Ошибка", f"Не удалось удалить назначение: {str(e)}")
 
 class MapPointDialog(QDialog):
     def __init__(self, api_key, parent=None):

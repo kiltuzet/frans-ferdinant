@@ -92,17 +92,17 @@ class AdminPanel(QDialog):
         # Кнопки управления пользователями
         button_layout = QHBoxLayout()
         
-        btn_add = QPushButton("Добавить пользователя")
-        btn_add.clicked.connect(self.add_user)
-        button_layout.addWidget(btn_add)
+        self.btn_add = QPushButton("Добавить пользователя")
+        self.btn_add.clicked.connect(self.add_user)
+        button_layout.addWidget(self.btn_add)
         
-        btn_delete = QPushButton("Удалить пользователя")
-        btn_delete.clicked.connect(self.delete_user)
-        button_layout.addWidget(btn_delete)
+        self.btn_delete = QPushButton("Удалить пользователя")
+        self.btn_delete.clicked.connect(self.delete_user)
+        button_layout.addWidget(self.btn_delete)
         
-        btn_refresh = QPushButton("Обновить")
-        btn_refresh.clicked.connect(self.load_users)
-        button_layout.addWidget(btn_refresh)
+        self.btn_refresh = QPushButton("Обновить")
+        self.btn_refresh.clicked.connect(self.load_users)
+        button_layout.addWidget(self.btn_refresh)
         
         users_layout.addLayout(button_layout)
         
@@ -461,3 +461,20 @@ class BusDepotApp(QMainWindow):
         }
         """
         self.tabs.setStyleSheet(style)
+
+        # Вкладки
+        self.tabs.setTabToolTip(0, "Управление пользователями: добавление, удаление, просмотр")
+        self.tabs.setTabToolTip(1, "Управление базой данных: просмотр структуры, данных, редактирование")
+
+        # Вкладка пользователей
+        self.users_table.setToolTip("Список пользователей. Используйте кнопки ниже для управления пользователями.")
+        self.btn_add.setToolTip("Добавить нового пользователя")
+        self.btn_delete.setToolTip("Удалить выбранного пользователя")
+        self.btn_refresh.setToolTip("Обновить список пользователей")
+
+        # Вкладка базы данных
+        self.db_tree.setToolTip("Структура базы данных. Кликните по таблице для просмотра данных.")
+        self.data_table.setToolTip("Данные выбранной таблицы. Используйте пагинацию для просмотра всех записей.")
+        self.prev_btn.setToolTip("Показать предыдущую страницу данных")
+        self.next_btn.setToolTip("Показать следующую страницу данных")
+        self.page_label.setToolTip("Текущая страница данных")

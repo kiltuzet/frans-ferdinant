@@ -15,6 +15,9 @@ class AuthDialog(QDialog):
         self.password_input = QLineEdit()
         self.password_input.setEchoMode(QLineEdit.Password)
 
+        self.username_input.setToolTip("Введите ваш логин")
+        self.password_input.setToolTip("Введите ваш пароль")
+
         form_layout.addRow("Логин:", self.username_input)
         form_layout.addRow("Пароль:", self.password_input)
         layout.addLayout(form_layout)

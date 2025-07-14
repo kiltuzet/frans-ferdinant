@@ -6,11 +6,11 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import  QDateTime
 from PyQt5.QtGui import QKeySequence, QIcon
 from db import Database
-from admin import AdminLoginDialog,AdminPanel
-from WelcomeDialog import WelcomeDialog
+#from admin import AdminLoginDialog,AdminPanel
+#from WelcomeDialog import WelcomeDialog
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 import os
-from ManagerPanel import ManagerPanel
+#from ManagerPanel import ManagerPanel
 from dotenv import load_dotenv
 import os
 
@@ -27,13 +27,8 @@ class BusDepotApp(QMainWindow):
         self.admin_shortcut = QShortcut(QKeySequence("Ctrl+Shift+A"), self)
         self.admin_shortcut.activated.connect(self.show_admin_login)
 
-        self.manager_shortcut = QShortcut(QKeySequence("Ctrl+Shift+M"), self)
-        self.manager_shortcut.activated.connect(self.show_manager_panel)
-
+        self.setWindowIcon(QIcon("images/Icon.png"))  # если есть иконка
         self.init_ui()
-        
-        welcome = WelcomeDialog(self)
-        welcome.exec_()
         
         self.load_data()
     
@@ -58,26 +53,28 @@ class BusDepotApp(QMainWindow):
         
         # Вкладка поиска
         self.create_search_tab()
+
+        # Подсказки для вкладок
+        self.tabs.setTabToolTip(0, "Просмотр и обновление списка автобусов")
+        self.tabs.setTabToolTip(1, "Просмотр маршрутов, остановок и карты маршрута")
+        self.tabs.setTabToolTip(2, "Бронирование билетов на выбранный маршрут")
+        self.tabs.setTabToolTip(3, "Поиск маршрутов, автобусов и остановок")
     
      
     def show_admin_login(self):
         auth_dialog = AuthDialog(self)
         if auth_dialog.exec_() == QDialog.Accepted:
-            # В зависимости от роли открываем нужную панель
             if auth_dialog.user_role == "администратор":
                 from admin import AdminPanel
                 admin_panel = AdminPanel(self.db, self)
                 admin_panel.exec_()
             elif auth_dialog.user_role in ("диспетчер", "manager"):
                 from ManagerPanel import ManagerPanel
-                manager_panel = ManagerPanel(self.db, self)
+                # Передаём user_id!
+                manager_panel = ManagerPanel(self.db, self, user_id=auth_dialog.user_id)
                 manager_panel.exec_()
             else:
                 QMessageBox.information(self, "Вход", "Вход выполнен, но нет отдельной панели для вашей роли.")
-
-    def show_manager_panel(self):
-        manager_panel = ManagerPanel(self.db, self)
-        manager_panel.exec_()
 
     def create_buses_tab(self):
         tab = QWidget()
@@ -91,12 +88,12 @@ class BusDepotApp(QMainWindow):
         ])
         self.buses_table.setAlternatingRowColors(True)
         self.buses_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.buses_table.setToolTip("Список автобусов")
+        self.buses_table.setToolTip("Список всех автобусов. Двойной клик — подробности.")
         layout.addWidget(self.buses_table)
         
         # Кнопка обновления
         btn_refresh = QPushButton("Обновить данные")
-        btn_refresh.setToolTip("Обновить данные автобусов")
+        btn_refresh.setToolTip("Обновить список автобусов")
         btn_refresh.setIcon(QIcon("icons/refresh.png"))  # если есть иконка
         btn_refresh.clicked.connect(self.load_buses)
         layout.addWidget(btn_refresh)
@@ -110,6 +107,7 @@ class BusDepotApp(QMainWindow):
         # Комбобокс для выбора маршрута
         self.route_combo = QComboBox()
         self.route_combo.currentIndexChanged.connect(self.load_route_details)
+        self.route_combo.setToolTip("Выберите маршрут для просмотра остановок и карты")
         layout.addWidget(QLabel("Выберите маршрут:"))
         layout.addWidget(self.route_combo)
         
@@ -119,11 +117,13 @@ class BusDepotApp(QMainWindow):
         self.stops_table.setHorizontalHeaderLabels([
             "Порядок", "Название", "Адрес", "Время прибытия"
         ])
+        self.stops_table.setToolTip("Остановки выбранного маршрута")
         layout.addWidget(self.stops_table)
 
         # Виджет для карты
         self.route_map_view = QWebEngineView()
         self.route_map_view.setMinimumHeight(350)
+        self.route_map_view.setToolTip("Карта маршрута выбранного маршрута")
         layout.addWidget(self.route_map_view)
         
         self.tabs.addTab(tab, "Маршруты")
@@ -138,33 +138,39 @@ class BusDepotApp(QMainWindow):
         # Выбор маршрута
         self.booking_route_combo = QComboBox()
         self.booking_route_combo.currentIndexChanged.connect(self.update_stop_combos)
+        self.booking_route_combo.setToolTip("Выберите маршрут для бронирования билета")
         form_layout.addWidget(QLabel("Маршрут:"))
         form_layout.addWidget(self.booking_route_combo)
         
         # Выбор остановки отправления
         self.departure_stop_combo = QComboBox()
+        self.departure_stop_combo.setToolTip("Выберите остановку отправления")
         form_layout.addWidget(QLabel("Остановка отправления:"))
         form_layout.addWidget(self.departure_stop_combo)
         
         # Выбор остановки назначения
         self.arrival_stop_combo = QComboBox()
+        self.arrival_stop_combo.setToolTip("Выберите остановку назначения")
         form_layout.addWidget(QLabel("Остановка назначения:"))
         form_layout.addWidget(self.arrival_stop_combo)
         
         # Дата и время
         self.booking_datetime = QDateTimeEdit()
         self.booking_datetime.setDateTime(QDateTime.currentDateTime())
+        self.booking_datetime.setToolTip("Выберите дату и время отправления")
         form_layout.addWidget(QLabel("Дата и время:"))
         form_layout.addWidget(self.booking_datetime)
         
         # Количество билетов
         self.tickets_count = QLineEdit("1")
         self.tickets_count.setPlaceholderText("Введите количество билетов")
+        self.tickets_count.setToolTip("Введите количество билетов для бронирования")
         form_layout.addWidget(QLabel("Количество билетов:"))
         form_layout.addWidget(self.tickets_count)
         
         # Кнопка бронирования
         btn_book = QPushButton("Забронировать")
+        btn_book.setToolTip("Забронировать билеты на выбранный маршрут")
         btn_book.clicked.connect(self.book_tickets)
         form_layout.addWidget(btn_book)
         
@@ -173,6 +179,7 @@ class BusDepotApp(QMainWindow):
         # Виджет для карты остановок
         self.booking_map_view = QWebEngineView()
         self.booking_map_view.setMinimumHeight(300)
+        self.booking_map_view.setToolTip("Карта остановок выбранного маршрута")
         layout.addWidget(self.booking_map_view)
         
         self.tabs.addTab(tab, "Бронирование")
@@ -184,10 +191,12 @@ class BusDepotApp(QMainWindow):
         # Поле поиска
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Введите маршрут, автобус или остановку...")
+        self.search_input.setToolTip("Введите маршрут, автобус или остановку для поиска")
         layout.addWidget(self.search_input)
         
         # Кнопка поиска
         btn_search = QPushButton("Поиск")
+        btn_search.setToolTip("Начать поиск по маршрутам, автобусам и остановкам")
         btn_search.clicked.connect(self.perform_search)
         layout.addWidget(btn_search)
         
@@ -197,6 +206,7 @@ class BusDepotApp(QMainWindow):
         self.search_results.setHorizontalHeaderLabels([
             "Тип", "Название", "Описание", "Детали"
         ])
+        self.search_results.setToolTip("Результаты поиска по маршрутам, автобусам и остановкам")
         layout.addWidget(self.search_results)
         
         self.tabs.addTab(tab, "Поиск")
