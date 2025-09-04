@@ -1,5 +1,5 @@
 PyQt5==5.15.7
+PyQtWebEngine==5.15.7
 mysql-connector-python==8.0.33
 python-dotenv==1.0.0
-PyQtWebEngine
-requests
+requests==2.31.0

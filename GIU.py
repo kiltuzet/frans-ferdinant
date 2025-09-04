@@ -1,19 +1,23 @@
 from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QMainWindow, QWidget, QVBoxLayout, 
     QLabel, QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
     QComboBox, QMessageBox, QTabWidget, QDateTimeEdit,QShortcut,QDialog
 )
-from PyQt5.QtCore import Qt, QDateTime
+from PyQt5.QtCore import  QDateTime
 from PyQt5.QtGui import QKeySequence, QIcon
 from db import Database
-from admin import AdminLoginDialog,AdminPanel
-from WelcomeDialog import WelcomeDialog
+#from admin import AdminLoginDialog,AdminPanel
+#from WelcomeDialog import WelcomeDialog
 from PyQt5.QtWebEngineWidgets import QWebEngineView
-import folium
 import os
-from PyQt5.QtCore import QUrl
+#from ManagerPanel import ManagerPanel
+from dotenv import load_dotenv
+import os
 
+from Auth import AuthDialog
 class BusDepotApp(QMainWindow):
+    load_dotenv()
+    YANDEX_API_KEY = os.getenv("YANDEX_API_KEY").replace('"', '').replace("'", "")
     def __init__(self):
         super().__init__()
         self.db = Database()
@@ -23,10 +27,8 @@ class BusDepotApp(QMainWindow):
         self.admin_shortcut = QShortcut(QKeySequence("Ctrl+Shift+A"), self)
         self.admin_shortcut.activated.connect(self.show_admin_login)
 
+        self.setWindowIcon(QIcon("images/Icon.png"))  # если есть иконка
         self.init_ui()
-        
-        welcome = WelcomeDialog(self)
-        welcome.exec_()
         
         self.load_data()
     
@@ -51,13 +53,28 @@ class BusDepotApp(QMainWindow):
         
         # Вкладка поиска
         self.create_search_tab()
+
+        # Подсказки для вкладок
+        self.tabs.setTabToolTip(0, "Просмотр и обновление списка автобусов")
+        self.tabs.setTabToolTip(1, "Просмотр маршрутов, остановок и карты маршрута")
+        self.tabs.setTabToolTip(2, "Бронирование билетов на выбранный маршрут")
+        self.tabs.setTabToolTip(3, "Поиск маршрутов, автобусов и остановок")
     
      
     def show_admin_login(self):
-        login_dialog = AdminLoginDialog(self)
-        if login_dialog.exec_() == QDialog.Accepted:
-            admin_panel = AdminPanel(self.db, self)
-            admin_panel.exec_()
+        auth_dialog = AuthDialog(self)
+        if auth_dialog.exec_() == QDialog.Accepted:
+            if auth_dialog.user_role == "администратор":
+                from admin import AdminPanel
+                admin_panel = AdminPanel(self.db, self)
+                admin_panel.exec_()
+            elif auth_dialog.user_role in ("диспетчер", "manager"):
+                from ManagerPanel import ManagerPanel
+                # Передаём user_id!
+                manager_panel = ManagerPanel(self.db, self, user_id=auth_dialog.user_id)
+                manager_panel.exec_()
+            else:
+                QMessageBox.information(self, "Вход", "Вход выполнен, но нет отдельной панели для вашей роли.")
 
     def create_buses_tab(self):
         tab = QWidget()
@@ -71,12 +88,12 @@ class BusDepotApp(QMainWindow):
         ])
         self.buses_table.setAlternatingRowColors(True)
         self.buses_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.buses_table.setToolTip("Список автобусов")
+        self.buses_table.setToolTip("Список всех автобусов. Двойной клик — подробности.")
         layout.addWidget(self.buses_table)
         
         # Кнопка обновления
         btn_refresh = QPushButton("Обновить данные")
-        btn_refresh.setToolTip("Обновить данные автобусов")
+        btn_refresh.setToolTip("Обновить список автобусов")
         btn_refresh.setIcon(QIcon("icons/refresh.png"))  # если есть иконка
         btn_refresh.clicked.connect(self.load_buses)
         layout.addWidget(btn_refresh)
@@ -90,6 +107,7 @@ class BusDepotApp(QMainWindow):
         # Комбобокс для выбора маршрута
         self.route_combo = QComboBox()
         self.route_combo.currentIndexChanged.connect(self.load_route_details)
+        self.route_combo.setToolTip("Выберите маршрут для просмотра остановок и карты")
         layout.addWidget(QLabel("Выберите маршрут:"))
         layout.addWidget(self.route_combo)
         
@@ -99,11 +117,13 @@ class BusDepotApp(QMainWindow):
         self.stops_table.setHorizontalHeaderLabels([
             "Порядок", "Название", "Адрес", "Время прибытия"
         ])
+        self.stops_table.setToolTip("Остановки выбранного маршрута")
         layout.addWidget(self.stops_table)
 
         # Виджет для карты
         self.route_map_view = QWebEngineView()
         self.route_map_view.setMinimumHeight(350)
+        self.route_map_view.setToolTip("Карта маршрута выбранного маршрута")
         layout.addWidget(self.route_map_view)
         
         self.tabs.addTab(tab, "Маршруты")
@@ -117,37 +137,51 @@ class BusDepotApp(QMainWindow):
         
         # Выбор маршрута
         self.booking_route_combo = QComboBox()
+        self.booking_route_combo.currentIndexChanged.connect(self.update_stop_combos)
+        self.booking_route_combo.setToolTip("Выберите маршрут для бронирования билета")
         form_layout.addWidget(QLabel("Маршрут:"))
         form_layout.addWidget(self.booking_route_combo)
         
         # Выбор остановки отправления
         self.departure_stop_combo = QComboBox()
+        self.departure_stop_combo.setToolTip("Выберите остановку отправления")
         form_layout.addWidget(QLabel("Остановка отправления:"))
         form_layout.addWidget(self.departure_stop_combo)
         
         # Выбор остановки назначения
         self.arrival_stop_combo = QComboBox()
+        self.arrival_stop_combo.setToolTip("Выберите остановку назначения")
         form_layout.addWidget(QLabel("Остановка назначения:"))
         form_layout.addWidget(self.arrival_stop_combo)
         
         # Дата и время
         self.booking_datetime = QDateTimeEdit()
         self.booking_datetime.setDateTime(QDateTime.currentDateTime())
+        self.booking_datetime.setToolTip("Выберите дату и время отправления")
         form_layout.addWidget(QLabel("Дата и время:"))
         form_layout.addWidget(self.booking_datetime)
         
         # Количество билетов
         self.tickets_count = QLineEdit("1")
         self.tickets_count.setPlaceholderText("Введите количество билетов")
+        self.tickets_count.setToolTip("Введите количество билетов для бронирования")
         form_layout.addWidget(QLabel("Количество билетов:"))
         form_layout.addWidget(self.tickets_count)
         
         # Кнопка бронирования
         btn_book = QPushButton("Забронировать")
+        btn_book.setToolTip("Забронировать билеты на выбранный маршрут")
         btn_book.clicked.connect(self.book_tickets)
         form_layout.addWidget(btn_book)
         
         layout.addLayout(form_layout)
+
+        # Виджет для карты остановок
+        self.booking_map_view = QWebEngineView()
+        self.booking_map_view.setMinimumHeight(300)
+        self.booking_map_view.setToolTip("Карта остановок выбранного маршрута")
+        layout.addWidget(self.booking_map_view)
+        
         self.tabs.addTab(tab, "Бронирование")
     
     def create_search_tab(self):
@@ -157,10 +191,12 @@ class BusDepotApp(QMainWindow):
         # Поле поиска
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Введите маршрут, автобус или остановку...")
+        self.search_input.setToolTip("Введите маршрут, автобус или остановку для поиска")
         layout.addWidget(self.search_input)
         
         # Кнопка поиска
         btn_search = QPushButton("Поиск")
+        btn_search.setToolTip("Начать поиск по маршрутам, автобусам и остановкам")
         btn_search.clicked.connect(self.perform_search)
         layout.addWidget(btn_search)
         
@@ -170,6 +206,7 @@ class BusDepotApp(QMainWindow):
         self.search_results.setHorizontalHeaderLabels([
             "Тип", "Название", "Описание", "Детали"
         ])
+        self.search_results.setToolTip("Результаты поиска по маршрутам, автобусам и остановкам")
         layout.addWidget(self.search_results)
         
         self.tabs.addTab(tab, "Поиск")
@@ -201,7 +238,7 @@ class BusDepotApp(QMainWindow):
     def load_routes(self):
         # Получаем все маршруты
         routes = self.db.fetch_all(
-            "SELECT id, route_number, route_name, is_regular, base_fare FROM routes ORDER BY route_number"
+            "SELECT id, route_number, route_name, is_regular, base_fare FROM routes WHERE is_regular = 1 ORDER BY route_number"
         )
 
         self.route_combo.clear()
@@ -221,6 +258,11 @@ class BusDepotApp(QMainWindow):
         if not route_id:
             return
 
+        # Получаем данные о маршруте
+        route = self.db.fetch_one(
+            "SELECT is_regular, base_fare FROM routes WHERE id = %s", (route_id,)
+        )
+
         stops = self.db.fetch_all("""
             SELECT rs.stop_order, s.name, s.address, rs.arrival_time, s.latitude, s.longitude
             FROM route_stops rs
@@ -238,41 +280,78 @@ class BusDepotApp(QMainWindow):
         self.stops_table.resizeColumnsToContents()
         points = [(stop['latitude'], stop['longitude']) for stop in stops if stop['latitude'] and stop['longitude']]
         if points:
-            html = self.generate_yandex_map_html(points, '4d5eb61f-4a3e-4ddc-91e4-736be3b4fc63')
+            html = self.generate_yandex_map_html(points, self.YANDEX_API_KEY)
             self.route_map_view.setHtml(html)
         else:
             self.route_map_view.setHtml("<h3>Нет координат для построения маршрута</h3>")
     
+        # Показываем стоимость, если маршрут регулярный
+        if route and route.get('is_regular'):
+            fare = route.get('base_fare', '—')
+            if not hasattr(self, 'fare_label'):
+                self.fare_label = QLabel()
+                self.tabs.widget(1).layout().addWidget(self.fare_label)
+            self.fare_label.setText(f"<b>Стоимость поездки: {fare} руб.</b>")
+        elif hasattr(self, 'fare_label'):
+            self.fare_label.setText("")
+    
     def load_booking_routes(self):
-        # Только нерегулярные рейсы (is_regular = false/0)
         routes = self.db.fetch_all(
             "SELECT id, route_number, route_name FROM routes WHERE is_regular = 0 ORDER BY route_number"
         )
+        self.booking_route_combo.blockSignals(True)  # Отключаем сигналы на время заполнения
         self.booking_route_combo.clear()
         for route in routes:
             self.booking_route_combo.addItem(f"{route['route_number']} - {route['route_name']}", route['id'])
+        self.booking_route_combo.blockSignals(False)  # Включаем обратно
 
-        self.booking_route_combo.currentIndexChanged.connect(self.update_stop_combos)
+        # Можно явно вызвать обновление, если нужно:
+        self.update_stop_combos()
     
     def update_stop_combos(self):
         route_id = self.booking_route_combo.currentData()
         if not route_id:
             return
-        
+
         stops = self.db.fetch_all("""
-            SELECT s.id, s.name, rs.stop_order
+            SELECT s.id, s.name, rs.stop_order, s.latitude, s.longitude
             FROM route_stops rs
             JOIN stops s ON rs.id_stop = s.id
             WHERE rs.id_route = %s
             ORDER BY rs.stop_order
         """, (route_id,))
-        
+
         self.departure_stop_combo.clear()
         self.arrival_stop_combo.clear()
-        
+
+        points = []
         for stop in stops:
             self.departure_stop_combo.addItem(stop['name'], stop['id'])
             self.arrival_stop_combo.addItem(stop['name'], stop['id'])
+            print(stop['latitude'])
+            print(stop['longitude'])
+            if stop['latitude'] and stop['longitude']:
+                points.append((stop['latitude'], stop['longitude']))
+                #print(points)
+        # Карта остановок
+
+        if points:
+            html = self.generate_yandex_map_html(points, self.YANDEX_API_KEY)
+            self.booking_map_view.setHtml(html)
+        else:
+            self.booking_map_view.setHtml("<h3>Нет координат для построения карты</h3>")
+
+        # Информация о стоимости билета
+        route = self.db.fetch_one(
+            "SELECT base_fare FROM routes WHERE id = %s", (route_id,)
+        )
+        if not hasattr(self, 'booking_fare_label'):
+            self.booking_fare_label = QLabel()
+            self.tabs.widget(2).layout().addWidget(self.booking_fare_label)
+        if route and route.get('base_fare') is not None:
+            self.booking_fare_label.setText(f"<b>Стоимость билета: {route['base_fare']} руб.</b>")
+        else:
+            self.booking_fare_label.setText("Стоимость билета: —")
     
     def book_tickets(self):
         route_id = self.booking_route_combo.currentData()
@@ -300,16 +379,15 @@ class BusDepotApp(QMainWindow):
             QMessageBox.warning(self, "Ошибка", "Не выбран маршрут")
             return
 
-        route = self.db.fetch_one("SELECT distance_km FROM routes WHERE id = %s", (route_id,))
+        route = self.db.fetch_one("SELECT base_fare FROM routes WHERE id = %s", (route_id,))
         print("Route:", route)
         if not route:
             QMessageBox.warning(self, "Ошибка", "Маршрут не найден")
             return
         
         # Расчет стоимости (примерный расчет)
-        distance = route['distance_km']
-        fare = round(distance * 2 * tickets, 2)  # 2 рубля за км
-        
+        fare=route['base_fare']*tickets
+        # / tickets
         # Добавление записи о пассажирах
         for _ in range(tickets):
             self.db.execute_query("""
@@ -320,7 +398,7 @@ class BusDepotApp(QMainWindow):
                 route_id,
                 booking_time,
                 f"TKT-{route_id}-{departure_stop_id}-{arrival_stop_id}",
-                fare / tickets
+                fare
             ))
         
         QMessageBox.information(
